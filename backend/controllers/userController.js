@@ -5,6 +5,7 @@ import doctorModel from '../models/doctorModel.js';
 import jwt from 'jsonwebtoken';
 import {v2 as cloudinary} from 'cloudinary';
 import appointmentModel from '../models/appointmentModal.js';
+import Stripe from 'stripe';
 
 // API to register user
 const registerUser =  async (req, res) => {
@@ -176,4 +177,88 @@ const bookAppointment = async (req, res) => {
   }
 }
 
-export { registerUser, loginUser, getProfile, updateProfile, bookAppointment };
+// API to get user appointments for frontend my-appointments page
+const listAppointments = async (req, res) => {
+  try {
+
+    const { userId } = req.body;
+    const appointments = await appointmentModel.find({ userId });
+
+    res.json({ success: true, appointments });
+    
+  } catch (error) {
+    console.log(error);
+    res.json({ success: false, message: error.message });
+  }
+}
+
+// API to cancel appointment
+const cancelAppointment = async (req, res) => {
+  try {
+
+    const { userId, appointmentId } = req.body;
+    
+    const appointmentData = await appointmentModel.findById(appointmentId);
+
+    // verify appointment user
+    if(appointmentData.userId !== userId){
+      return res.json({ success: false, message: 'Unauthorized' });
+    }
+
+    // delete appointment
+    await appointmentModel.findByIdAndUpdate(appointmentId, {cancelled: true});
+
+    // releasing doctor slot
+    const {docId, slotDate, slotTime} = appointmentData;
+
+    const doctorData = await doctorModel.findById(docId);
+
+    let slots_booked = doctorData.slots_booked;
+
+    slots_booked[slotDate] = slots_booked[slotDate].filter(e => e !== slotTime);
+
+    await doctorModel.findByIdAndUpdate(docId, {slots_booked});
+
+    res.json({ success: true, message: 'Appointment Cancelled' });
+    
+  } catch (error) {
+    console.log(error);
+    res.json({ success: false, message: error.message });
+  }
+}
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+// API to make payment of appointment using stripe
+const paymentStripe = async (req, res) => {
+  try {
+    const { appointmentId } = req.body;
+    
+    // Recupera l'appuntamento dal database
+    const appointmentData = await appointmentModel.findById(appointmentId);
+    if (!appointmentData) {
+      return res.status(404).json({ success: false, message: 'Appointment not found' });
+    }
+    
+    // Converti l'importo in centesimi (assumendo che appointmentData.amount sia in euro)
+    const amountInCents = appointmentData.amount * 100;
+    
+    // Crea il Payment Intent passando in metadata solo stringhe.
+    // Se appointmentId non è già una stringa, forzala a stringa (ad esempio, con .toString())
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: amountInCents,
+      currency: process.env.CURRENCY,
+      payment_method_types: ['card'],
+      metadata: { appointmentId: appointmentId.toString() },
+    });
+    
+    res.json({ success: true, clientSecret: paymentIntent.client_secret });
+    
+  } catch (error) {
+    console.error('Stripe Payment Error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+
+
+export { registerUser, loginUser, getProfile, updateProfile, bookAppointment, listAppointments, cancelAppointment, paymentStripe};
