@@ -5,6 +5,7 @@ import doctorModel from '../models/doctorModel.js';
 import jwt from 'jsonwebtoken';
 import {v2 as cloudinary} from 'cloudinary';
 import appointmentModel from '../models/appointmentModal.js';
+import Stripe from 'stripe';
 
 // API to register user
 const registerUser =  async (req, res) => {
@@ -226,4 +227,38 @@ const cancelAppointment = async (req, res) => {
   }
 }
 
-export { registerUser, loginUser, getProfile, updateProfile, bookAppointment, listAppointments, cancelAppointment };
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+// API to make payment of appointment using stripe
+const paymentStripe = async (req, res) => {
+  try {
+    const { appointmentId } = req.body;
+    
+    // Recupera l'appuntamento dal database
+    const appointmentData = await appointmentModel.findById(appointmentId);
+    if (!appointmentData) {
+      return res.status(404).json({ success: false, message: 'Appointment not found' });
+    }
+    
+    // Converti l'importo in centesimi (assumendo che appointmentData.amount sia in euro)
+    const amountInCents = appointmentData.amount * 100;
+    
+    // Crea il Payment Intent passando in metadata solo stringhe.
+    // Se appointmentId non è già una stringa, forzala a stringa (ad esempio, con .toString())
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: amountInCents,
+      currency: process.env.CURRENCY,
+      payment_method_types: ['card'],
+      metadata: { appointmentId: appointmentId.toString() },
+    });
+    
+    res.json({ success: true, clientSecret: paymentIntent.client_secret });
+    
+  } catch (error) {
+    console.error('Stripe Payment Error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+
+
+export { registerUser, loginUser, getProfile, updateProfile, bookAppointment, listAppointments, cancelAppointment, paymentStripe};

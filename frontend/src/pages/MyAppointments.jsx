@@ -2,9 +2,13 @@ import { useContext, useEffect, useState } from "react";
 import { AppContext } from "../context/AppContext";
 import axios from "axios";
 import { toast } from "react-toastify";
+import PaymentForm from "../components/PaymentForm";
 
 const MyAppointments = () => {
   const { backendUrl, token, getDoctorsData } = useContext(AppContext);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [clientSecret, setClientSecret] = useState(null);
+  const [selectedAppointment, setSelectedAppointment] = useState(null);
 
   const [appointments, setAppointments] = useState([]);
   const months = ["", 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -49,6 +53,30 @@ const MyAppointments = () => {
     }
   }
 
+  // Funzione per iniziare il pagamento
+  const handlePayOnline = async (appointmentId) => {
+    try {
+      const { data } = await axios.post(
+        backendUrl + 'api/user/payment-stripe',
+        { appointmentId },
+        { headers: { token } }
+      );
+      if (data.success) {
+        console.log("Client secret ricevuto:", data.clientSecret);
+        setClientSecret(data.clientSecret);
+        // Se necessario, puoi salvare l'appuntamento selezionato per eventuali usi futuri
+        setSelectedAppointment(appointmentId);
+        setShowPaymentModal(true);
+      } else {
+        toast.error(data.message);
+      }
+    } catch (error) {
+      console.log(error);
+      toast.error("Payment initialization failed");
+    }
+  };
+  
+
   useEffect(() => {
     if(token){
       getUserAppointments();
@@ -74,13 +102,31 @@ const MyAppointments = () => {
             </div>
             <div></div>
             <div className="flex flex-col gap-2 justify-end">
-              {!item.cancelled && <button className="text-sm text-stone-500 text-center sm:min-w-48 py-2 border rounded hover:bg-primary hover:text-white transition-all duration-300">Pay Online</button>}
+              {!item.cancelled && <button onClick={() => handlePayOnline(item)} className="text-sm text-stone-500 text-center sm:min-w-48 py-2 border rounded hover:bg-primary hover:text-white transition-all duration-300">Pay Online</button>}
               {!item.cancelled && <button onClick={() => cancelAppointment(item._id)} className="text-sm text-stone-500 text-center sm:min-w-48 py-2 border rounded hover:bg-red-600 hover:text-white transition-all duration-300">Cancel appointment</button>}
               {item.cancelled && <button className="sm:min-w-48 py-2 border border-red-500 rounded text-red-500">Appointment cancelled</button>}
             </div>
           </div>
         ))}
       </div>
+
+      {/* Modal per il pagamento */}
+      {showPaymentModal && clientSecret && (
+        <div className="payment-modal fixed top-0 left-0 w-full h-full flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white p-4 rounded">
+            <button onClick={() => setShowPaymentModal(false)}>Close</button>
+            <PaymentForm
+              clientSecret={clientSecret}
+              appointment={selectedAppointment}
+              onClose={() => {
+                setShowPaymentModal(false);
+                setClientSecret(null);
+                setSelectedAppointment(null);
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
