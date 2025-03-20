@@ -82,21 +82,23 @@ const DoctorContextProvider = (props) => {
   }
 
   const getProfileData = async () => {
-
     try {
-      const {data} = await axios.get(backendUrl + "api/doctor/profile", {headers: {dToken}});
-      if(data.success){
+      const { data } = await axios.get(backendUrl + "api/doctor/profile", { headers: { dToken } });
+      if (data.success) {
+        // Se l'address è una stringa, esegui il parsing in oggetto
+        if (typeof data.profileData.address === "string") {
+          data.profileData.address = JSON.parse(data.profileData.address);
+        }
         setProfileData(data.profileData);
       } else {
         toast.error(data.message);
       }
-      
     } catch (error) {
       console.error(error);
       toast.error(error.message);
     }
-  }
-
+  };
+  
   const value = {
     dToken,
     setDToken,
