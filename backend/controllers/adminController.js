@@ -22,32 +22,7 @@ const addDoctor = async (req, res) => {
     } = req.body;
     const imageFile = req.file;
 
-    console.log(
-      {
-        name,
-        email,
-        password,
-        speciality,
-        degree,
-        experience,
-        about,
-        fees,
-        address,
-      },
-      imageFile
-    );
-
-    if (
-      !name ||
-      !email ||
-      !password ||
-      !speciality ||
-      !degree ||
-      !experience ||
-      !about ||
-      !fees ||
-      !address
-    ) {
+    if (!name || !email || !password || !speciality || !degree || !experience || !about || !fees || !address) {
       return res.json({ success: false, message: "Missing Details" });
     }
 
@@ -61,12 +36,13 @@ const addDoctor = async (req, res) => {
     });
     const imageUrl = imageUpload.secure_url;
 
-    // Creazione del modello del dottore
+    const hashedPassword = await bcrypt.hash(password, 10);
+
     const doctorData = {
       name,
       email,
       image: imageUrl,
-      password,
+      password: hashedPassword,
       speciality,
       degree,
       experience,
